@@ -1,0 +1,9 @@
+//Warning,json Not support "//", you should remove "//" in actual use
+{
+	"token": "yourtoken123456789", //your token
+	"remoteSub": "https://192.168.1.1/xlash_remote.json", //remote subscribe address
+	"autoUpdate": 30, //auto update subscribe time ,30=30minute
+	"local_Listen": "127.0.0.1:8080" //local subscribe API address
+}
+
+//Get subscribe format like "http://127.0.0.1:8080/api/v1/client/subscribe?token=yourtoken123456789"

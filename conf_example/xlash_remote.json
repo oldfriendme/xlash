@@ -1,0 +1,24 @@
+//Warning,json Not support "//", you should remove "//" in actual use
+{
+	"minVersion": 0.1, //minVersion ,client Version must >= thisVersion
+	"mode": "mode1", //Reference source code definition
+	"client-fingerprint": "chrome",
+	"serverip": [
+		"192.168.1.1:443",
+		"192.168.1.2:443",
+		"192.168.1.3:443"
+	],
+	"sni": [
+		"www1.example.com",
+		"www2.example.com",
+		"www3.example.com"
+	],
+	"name": [
+		"node1",
+		"node2",
+		"node3"
+	],
+	"path": "/path_123",
+	"uuid": "aaaaaaa-aaaa-aaaa-aaaaaaaa", //your uuid
+	"usage": 12 //Traffic usage, M
+}
