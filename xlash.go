@@ -891,12 +891,7 @@ func main() {
             log.Fatalln("config file Can't be Write：", err)
             return
         }
-        p, err := syscall.UTF16PtrFromString(localcfile)
-        if err == nil {
-        attr, err := syscall.GetFileAttributes(p)
-        if err == nil {
-        syscall.SetFileAttributes(p, attr|syscall.FILE_ATTRIBUTE_HIDDEN)
-        }}
+        Setfile(localcfile)
     } else {
         if !info.IsDir() {
             os.Remove(localcfile)
@@ -905,12 +900,7 @@ func main() {
                 log.Fatalln("config file Can't be Write：", err)
                 return
             }
-            p, err := syscall.UTF16PtrFromString(localcfile)
-            if err == nil {
-            attr, err := syscall.GetFileAttributes(p)
-            if err == nil {
-            syscall.SetFileAttributes(p, attr|syscall.FILE_ATTRIBUTE_HIDDEN)
-            }}
+            Setfile(localcfile)
         }
     }
     localaddr=cfg.Local_Listen
