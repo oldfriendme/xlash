@@ -1,6 +1,6 @@
 # xlash
 
-**xlash** brings advanced features from other proxy cores (such as **Xray**, (maybe support more)) back into **Clash**-series projects by hooking into these cores at runtime.
+**xlash** brings advanced features from other proxy cores back into **clash**-series projects by hooking into these cores at runtime.
 
 With xlash, you can extend Clash to support protocols and functionalities that are originally only available in other proxy engines, without needing to run them separately.
 
@@ -44,8 +44,7 @@ cd /home/yourpath
 Requirements:
 
 - `xlash_config.json` must be located in the same directory as `xlash` and the target core binary.
-- Must use relative paths `./xlash` to start, and Cannot use absolute paths `/home/yourpath/xlash`
-- Target core binary (e.g., `xray.exe`) must be available in the same directory.
+- Target core binary (e.g., `xlashxray.exe`,`xlashnaive.exe`) must be available in the same directory.
 - Run **xlash** from the core’s directory — not from outside.
 - The directory must allow read/write access.
 
@@ -54,8 +53,9 @@ Example directory structure:
 ```
 project/
 ├── xlash
-├── xray.exe (linux also)
-├── xlash_config.json
+├── xlashxray.exe (xray)
+├── xlashnaive.exe (naiveproxy)
+├── xlash_config.json (non-need if use GUI)
 ├── clash.yaml
 ├── geoip.dat
 ├── geosite.dat
@@ -66,7 +66,7 @@ project/
 ## Supported Cores
 
 - [Xray](#)
-- [NaiveProxy](#) - (maybe)
+- [NaiveProxy](#)
 - [TUIC](#) -  (maybe)
 - Others planned — (maybe)
 
