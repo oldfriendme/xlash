@@ -83,6 +83,7 @@ type StreamSettings struct {
     Security     string       `json:"security"`
     TLSSettings  TLSSettings  `json:"tlsSettings"`
     GrpcSettings GrpcSettings `json:"grpcSettings"`
+    XhttpSettings XhttpSettings `json:"xhttpSettings"`
 }
 
 type TLSSettings struct {
@@ -90,6 +91,12 @@ type TLSSettings struct {
     ServerName    string   `json:"serverName"`
     ALPN          []string `json:"alpn"`
     Fingerprint   string   `json:"fingerprint"`
+}
+
+type XhttpSettings struct {
+    Path                  string `json:"path"`
+    Host                  string `json:"host"`
+    Mode                  string `json:"mode"`
 }
 
 type GrpcSettings struct {
@@ -133,9 +140,14 @@ type RouteX struct {
     OutboundTag string   `json:"outboundTag"`
 }
 
-type natureProxy struct {
+type nativeProxy1 struct {
     ListenAddr string   `json:"listen"`
     Proxy      string   `json:"proxy"`
+}
+
+type nativeProxym struct {
+    ListenAddr[] string   `json:"listen"`
+    Proxy[]      string   `json:"proxy"`
 }
 
 type CNP struct {
@@ -261,6 +273,64 @@ func Init_OUTPUT_json(tagNum string,serv_ip string,out_uuid string,sni string,fp
     return string(b)
 }
 
+func Init_OUTPUT_x_json(tagNum string,serv_ip string,out_uuid string,sni string,fp string,path string) string {
+    iport := strings.Split(serv_ip, ":")
+    if len(iport) != 2 {
+        return "nil"
+    }
+    prot,err:=strconv.Atoi(iport[1])
+    if err != nil{
+        return "nil"
+    }
+    if path[0]!='/'{
+        return "nil"
+    }
+    pathfile:=path
+    o := Outbound{
+        Tag:      "proxy"+tagNum,
+        Protocol: "vless",
+        Settings: OutboundSettings{
+            Vnext: []Vnext{
+                {
+                    Address: iport[0],
+                    Port:    prot,
+                    Users: []User{
+                        {
+                            ID:         out_uuid,
+                            AlterID:    0,
+                            Email:      "a@a.a",
+                            Security:   "auto",
+                            Encryption: "none",
+                        },
+                    },
+                },
+            },
+        },
+        StreamSettings: StreamSettings{
+            Network:  "xhttp",
+            Security: "tls",
+            TLSSettings: TLSSettings{
+                AllowInsecure: false,
+                ServerName:    sni,
+                ALPN:          []string{"h3", "h2", "http/1.1"},
+                Fingerprint:   fp,
+            },
+            XhttpSettings: XhttpSettings{
+                Path:           pathfile,
+                Host:           sni,
+                Mode:           "stream-up",
+            },
+        },
+        Mux: Mux{
+            Enabled:     false,
+            Concurrency: -1,
+        },
+    }
+
+    b, _ := json.MarshalIndent(o, "", "  ")
+    return string(b)
+}
+
 func Init_ROUTE_X(tag int) string{
     cfg := RouteX{
         Type:        "field",
@@ -271,6 +341,52 @@ func Init_ROUTE_X(tag int) string{
     data, _ := json.MarshalIndent(cfg, "", "  ")
 
     return string(data)
+}
+
+func Init_xhttp(fp string,serv_ip[] string,sni[] string,path string) string {
+       len:=len(serv_ip)
+    json_init:="{\"log\": {\"access\": \"\",\"error\": \"\",\"loglevel\": \"warning\"},\"inbounds\": ["
+    //(tagNum string,in_port int,in_uuid string) string
+    var err string
+    Inport := 12701
+    for i:=0;i<len;i++{
+        err = Init_INPUT_json(strconv.Itoa(i),Inport,cuuid)
+        json_init=json_init+err
+        Inport++
+        if i+1<len{
+            json_init=json_init+","
+        }
+    }
+    json_init=json_init+"],\"outbounds\": ["
+    //(tagNum string,serv_ip string,out_uuid string,sni string,fp string,path string)
+    for i:=0;i<len;i++{
+        err = Init_OUTPUT_x_json(strconv.Itoa(i),serv_ip[i],guuid,sni[i],fp,path)
+        if err == "nil" {
+            log.Println("ERR: Get subscribe format err.")
+            return err
+        }
+        json_init=json_init+err
+        if i+1<len{
+            json_init=json_init+","
+        }
+    }
+    json_init=json_init+",{\"tag\": \"block\",\"protocol\": \"blackhole\",\"settings\": {\"response\": {\"type\": \"http\"}}}],\"dns\": {\"hosts\": {\"dns.google\": \"8.8.8.8\",\"proxy.example.com\": \"127.0.0.1\"},\"servers\": [{\"address\": \"223.5.5.5\",\"domains\": ["
+    for i:=0;i<len;i++{
+        json_init=json_init+"\""+serv_ip[i]+"\""
+        if i+1<len{
+            json_init=json_init+","
+        }
+    }
+    json_init=json_init+"]},{\"address\": \"223.5.5.5\",\"domains\": [\"geosite:cn\",\"geosite:geolocation-cn\"],\"expectIPs\": [\"geoip:cn\"]},\"1.1.1.1\",\"8.8.8.8\",\"https://dns.google/dns-query\"]},\"routing\": {\"domainStrategy\": \"AsIs\",\"rules\": [{\"type\": \"field\",\"ip\": [\"geoip:private\"],\"outboundTag\": \"block\"},{\"type\": \"field\",\"port\": \"443\",\"network\": \"udp\",\"outboundTag\": \"block\"},"
+    for i:=0;i<len;i++{
+        err = Init_ROUTE_X(i)
+        json_init=json_init+err
+        if i+1<len{
+            json_init=json_init+","
+        }
+    }
+
+    return json_init+"]}}"
 }
 
 func Init_xgrpc(fp string,serv_ip[] string,sni[] string,path string) string {
@@ -317,13 +433,13 @@ func Init_xgrpc(fp string,serv_ip[] string,sni[] string,path string) string {
     return json_init+"]}}"
 }
 
-func Make_naive(serv_ip string,lisrenIP string) string {
+func Make_naive1(serv_ip string,lisrenIP string) string {
     parts := strings.Split(guuid, ":")
     if len(parts) != 2 {
         log.Printf("ERR: user:passwd format err")
         return "nil"
     }
-    cfg := natureProxy{
+    cfg := nativeProxy1{
         ListenAddr:        lisrenIP,
         Proxy:             "https://"+guuid+"@"+serv_ip,
     }
@@ -332,8 +448,41 @@ func Make_naive(serv_ip string,lisrenIP string) string {
     return string(data)
 }
 
-func Init_naive(serv_ip string) string {
-    return Make_naive(serv_ip,"socks://127.0.1.16:"+strconv.Itoa(9292))
+func Make_naiveM(serv_ip[] string,auth[] string) string {
+       lens:=len(serv_ip)
+       lisrenIP:=make([]string,lens)
+       startIP:=9293
+       for i:=0;i<lens;i++ {
+       at := strings.Split(auth[i], ":")
+    if len(at) != 2 {
+               log.Printf("ERR: user:passwd format err")
+               return "nil"
+       }
+       lisrenIP[i]="socks://127.0.1.16:"+strconv.Itoa(startIP)
+       startIP++
+       }
+
+       cfg := nativeProxym{
+        ListenAddr:        make([]string, 0, lens),
+        Proxy:             make([]string, 0, lens),
+    }
+
+       for i := 0; i < lens; i++ {
+        cfg.ListenAddr = append(cfg.ListenAddr,lisrenIP[i])
+        cfg.Proxy = append(cfg.Proxy, "https://"+auth[i]+"@"+serv_ip[i])
+    }
+
+    data, _ := json.MarshalIndent(cfg, "", "  ")
+    return string(data)
+}
+
+func Init_naive(serv_ip[] string,auth[] string) string {
+       lens:=len(serv_ip)
+       if lens==1{
+               return Make_naive1(serv_ip[0],"socks://127.0.1.16:"+strconv.Itoa(9292))
+       } else {
+               return Make_naiveM(serv_ip,auth)
+       }
 }
 
 func yaml_Unmarshal(s string,p *CNP){
@@ -402,18 +551,25 @@ if bytes.Contains(conf, []byte("- name: xlash_base64_")) {
         dcsh=conf
         return nil,1
     }
-    pos2 := bytes.Index(conf[pos+18:], []byte("- {name: xlash_np_"))                
-    if pos2>0 {
-        log.Printf("WRAN: naive not support multi listen, only can start one naive client")
-        log.Printf("See: https://github.com/klzgrad/naiveproxy/issues/668")
-    }
+       npNum:=1
+       opos:=pos
+        for {
+            opos = bytes.Index(conf[opos+18:], []byte("- {name: xlash_np_"))
+                if opos>0 {
+                    npNum++
+                } else {
+                    break
+                }
+        }
     Name :=strings.Replace(p.Name, "xlash_np_", "", 1)
     rs:=gs("127.0.1.16:9292",Name)
     ol:=18+len(xlash.Bytes())
     rl:=len(rs)
     spl:=ol - rl
     guuid=p.Auth
-    errn := Init_naive(p.Server+":"+strconv.Itoa(p.Port))
+    serv:=make([]string,1)
+    serv[0]=p.Server+":"+strconv.Itoa(p.Port)
+    errn := Init_naive(serv,nil)
     if spl < 0 || errn == "nil" {
         log.Printf("naive patch format err")
         dclash=true
@@ -424,6 +580,67 @@ if bytes.Contains(conf, []byte("- name: xlash_base64_")) {
     for i:=0;i<ol-2;i++{
         conf[i+pos]=rs[i]
     }
+    
+if npNum !=1 {
+       poss:=make([]int,npNum)
+       mxlash_byte:=make([]int,npNum)
+       opos=pos
+       for i:=1;i<npNum;i++{
+               opos = bytes.Index(conf[opos+18:], []byte("- {name: xlash_np_"))
+               poss[i]=opos
+       }
+       np:=make([]CNP,npNum)
+       np[0]=p
+       poss[0]=pos
+
+for i:=1;i<npNum;i++{
+       var xlash2 bytes.Buffer
+       for i:=poss[i]+17;i<len(conf);i++{
+               if conf[i] == '-' {
+                       break
+               }
+               xlash2.WriteByte(conf[i])
+       }
+       mxlash_byte[i]=len(xlash2.Bytes())
+       getbyte = bytes.ReplaceAll(xlash2.Bytes(), []byte("\r"), []byte{})
+       getbyte = bytes.ReplaceAll(getbyte, []byte("\n"), []byte(","))
+       line := "name: " + string(getbyte)
+       yaml_Unmarshal(line, &np[i])
+       if np[i].Type != "naiveproxy" {
+               dclash=true
+               dcsh=conf
+               return nil,1
+       }
+}
+guuids:=make([]string,npNum)
+
+for i:=1;i<npNum;i++{
+       Name2 :=strings.Replace(np[i].Name, "xlash_np_", "", 1)
+       rs2:=gs("127.0.1.16:"+strconv.Itoa(9292+i),Name2)
+       ol2:=18+mxlash_byte[i]
+       rl2:=len(rs2)
+       spl2:=ol2 - rl2
+       guuids[i]=np[i].Auth
+       if spl2 < 0 {
+               log.Printf("naive patch format err")
+               dclash=true
+               dcsh=conf
+               return nil,1
+       }
+       rs2=rs2+strings.Repeat(" ", spl2)
+       for j:=0;j<ol2-2;j++{
+               conf[j+poss[i]]=rs2[j]
+       }
+}
+       serv2:=make([]string,npNum)
+       for i:=0;i<npNum;i++{
+               serv2[i]=np[i].Server+":"+strconv.Itoa(np[i].Port)
+       }
+
+       errn = Init_naive(serv2,guuids)
+
+}
+    
     osstartLock.Lock()
     defer osstartLock.Unlock()
     err := os.WriteFile(localcfile+"/confignp.json", []byte(errn), 0600)
@@ -684,11 +901,16 @@ func Get_http_json() int{
     } else if cfg.Mode == "naive" {
     
     len:=len(cfg.ServerIP)
-    if len !=1 {
-        log.Printf("WRAN: naive not support multi listen, only can start one naive client")
-        log.Printf("See: https://github.com/klzgrad/naiveproxy/issues/668")
+    errn :=""
+    if len ==1 {
+       errn = Init_naive(cfg.ServerIP,nil)
+    } else {
+            guuids:=make([]string,len)
+            for i:=0;i<len;i++{
+                       guuids[i]=guuid
+            }
+            errn = Init_naive(cfg.ServerIP,guuids)
     }
-       errn := Init_naive(cfg.ServerIP[0])
         if errn != "nil" {
             md5num :=""
             if updateTime >0 {
@@ -738,11 +960,57 @@ func Get_http_json() int{
             log.Println("ERR: Init_naive err")
             return -20
         }
-        return -100
-    } else if cfg.Mode == "tuic" {
-        //support later,tuic port hopping
-        log.Println("support later: ", cfg.Mode)
-        return -100
+    } else if cfg.Mode == "xhttp" {
+        errn := Init_xhttp(cfg.Fingerprint,cfg.ServerIP,cfg.Sni,cfg.Path)
+        if errn != "nil" {
+            md5num :=""
+            if updateTime >0 {
+            hash := md5.New()
+            hash.Write([]byte(errn))
+            md5num = hex.EncodeToString(hash.Sum(nil))
+            } else {
+             md5num=MakeToken(8)
+            }
+            if md5sum != md5num{
+                //file changed
+                log.Println("INFO: subscribe file changed, update subscribe")
+                osstartLock.Lock()
+                               defer osstartLock.Unlock()
+                               err := os.WriteFile(localcfile+"/configx.json", []byte(errn), 0600)
+                 if err != nil {
+                    log.Println("ERR: update subscribe err",err)
+                    return -10
+                }
+                if cmdon {
+                                       cmdPid.Process.Kill()
+                                       cmdPid.Wait()
+                }
+                cmd := exec.Command(localfile+"/xlashxray.exe", "-c",localcfile+"/configx.json")
+                cmd.Stdout = os.Stdout
+                               cmd.Stderr = os.Stderr
+                               if err := cmd.Start(); err != nil {
+                    log.Println("ERR: start xray err:",err)
+                    return -11
+                }
+                cmdPid = cmd
+                cmdon = true
+                server_idx = len(cfg.ServerIP)
+            }
+            md5sum = md5num
+            server_commit=cfg.Name
+            gusage=cfg.Usage
+            dclash=false
+            for i := range server_commit {
+                decode ,err := url.PathUnescape(server_commit[i])
+                if err==nil{
+                    server_commit[i]=decode
+                }
+            }
+            return 0
+        } else {
+            log.Println("ERR: Init_xhttp xray err")
+            return -20
+        }
     } else {
         log.Println("ERR: mode not support: ", cfg.Mode)
         return -100
@@ -763,7 +1031,7 @@ func main() {
         log.Println("xlash [conf_file].json")
         return
     }
-    myVersion=0.2
+    myVersion=0.3
     var err error
     var confData[] byte
     var yamlData string
@@ -938,13 +1206,13 @@ func main() {
             } else {
                 ln.Close()
             }
-			//fix bug when xalsh be forceStop and not clean
-			Pexist ,err :=processExists("xlash")
-			if err == nil {
-				if Pexist{
-					Killcore(configuration)
-				}
-			}
+            //fix bug when xalsh be forceStop and not clean
+            Pexist ,err :=processExists("xlash")
+            if err == nil {
+                if Pexist{
+                    Killcore(configuration)
+                }
+            }
             cmd := exec.Command(localfile+"/xlashclashmeta.exe", "-m", "-d",configuration,"-f",confPath)
             cmd.Stdout = os.Stdout
             cmd.Stderr = os.Stderr
@@ -1014,22 +1282,22 @@ func KillMeta(configuration string){
 }
 
 func Killcore(configuration string){
-	if os.PathSeparator != '/' {
-		cmd := exec.Command("C:\\Windows\\System32\\taskkill.exe", "/im", "xlashxray.exe","/f")
-		cmd.Run()
-		cmd2 := exec.Command("C:\\Windows\\System32\\taskkill.exe", "/im", "xlashnaive.exe","/f")
-		cmd2.Run()
-	} else {
-		cmd := exec.Command("/bin/killall", "-9", "xlashxray.exe")
-		cmd.Run()
-		cmd2 := exec.Command("/bin/killall", "-9", "xlashnaive.exe")
-		cmd2.Run()
-	}
+    if os.PathSeparator != '/' {
+        cmd := exec.Command("C:\\Windows\\System32\\taskkill.exe", "/im", "xlashxray.exe","/f")
+        cmd.Run()
+        cmd2 := exec.Command("C:\\Windows\\System32\\taskkill.exe", "/im", "xlashnaive.exe","/f")
+        cmd2.Run()
+    } else {
+        cmd := exec.Command("/bin/killall", "-9", "xlashxray.exe")
+        cmd.Run()
+        cmd2 := exec.Command("/bin/killall", "-9", "xlashnaive.exe")
+        cmd2.Run()
+    }
 }
 
 func processExists(name string) (bool, error) {
-	var out bytes.Buffer
-	var output string
+    var out bytes.Buffer
+    var output string
 if os.PathSeparator != '/' {
     cmd := exec.Command("C:\\Windows\\System32\\tasklist.exe")
     cmd.Stdout = &out
@@ -1039,7 +1307,7 @@ if os.PathSeparator != '/' {
     }
     output = strings.ToLower(out.String())
 } else {
-	cmd := exec.Command("/bin/ps","-ef")
+    cmd := exec.Command("/bin/ps","-ef")
     cmd.Stdout = &out
     err := cmd.Run()
     if err != nil {
