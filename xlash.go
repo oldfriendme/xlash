@@ -42,8 +42,9 @@ type Sniffing struct {
 }
 
 type Settings struct {
-    Clients    []Client `json:"clients"`
-    Decryption string   `json:"decryption"`
+    Auth             string   `json:"auth"`
+    Udp              bool     `json:"udp"`
+    AllowTransparent bool   `json:"allowTransparent"`
 }
 
 type Client struct {
@@ -181,6 +182,8 @@ var (
     cshmm string
     osstartLock sync.Mutex
     localcfile string
+    sigChan chan os.Signal
+    lport string
 )
 
 
@@ -189,21 +192,16 @@ func Init_INPUT_json(tagNum string,in_port int,in_uuid string) string {
         Tag:      "in"+tagNum,
         Port:     in_port,
         Listen:   "127.0.1.16",
-        Protocol: "vless",
+        Protocol: "socks",
         Sniffing: Sniffing{
             Enabled:      true,
             DestOverride: []string{"http", "tls"},
             RouteOnly:    false,
         },
         Settings: Settings{
-            Clients: []Client{
-                {
-                    ID:    in_uuid,
-                    Level: 0,
-                    Email: "a@a.a",
-                },
-            },
-            Decryption: "none",
+            Auth: "noauth",
+            Udp:  true,
+            AllowTransparent: false,
         },
     }
 
@@ -312,7 +310,7 @@ func Init_OUTPUT_x_json(tagNum string,serv_ip string,out_uuid string,sni string,
             TLSSettings: TLSSettings{
                 AllowInsecure: false,
                 ServerName:    sni,
-                ALPN:          []string{"h3", "h2", "http/1.1"},
+                ALPN:          []string{"h2", "http/1.1"},
                 Fingerprint:   fp,
             },
             XhttpSettings: XhttpSettings{
@@ -511,6 +509,20 @@ func yaml_Unmarshal(s string,p *CNP){
 
 func hookwj(conf[] byte) ([]byte,int) {
 if bytes.Contains(conf, []byte("- name: xlash_base64_")) {
+    le := strings.Split(string(conf), "\n")
+    if len(le) > 0 {
+    for _,ln := range le {
+    if strings.HasPrefix(ln,"mixed-port:") {
+        ps := strings.Split(ln, ":")
+        if len(ps) == 2 {
+        pt, err := strconv.Atoi(strings.TrimSpace(ps[1]))
+            if err==nil {
+            if pt>0 && pt <65535{
+            lport=strconv.Itoa(pt)
+            os.WriteFile(localcfile+"/.addr", []byte(lport), 0600)
+            }}}
+        break
+    }}}
     conf = bytes.ReplaceAll(conf, []byte("\r"), []byte{})
     pos := bytes.Index(conf, []byte("- name: xlash_base64_"))
     var xlash bytes.Buffer
@@ -802,6 +814,22 @@ func clashAPI(w http.ResponseWriter, r *http.Request){
         w.Write(res)
         w.Write([]byte("\r\n"))
         return
+    } else if r.URL.Path == "/sysapi/exit" {
+    token := r.URL.Query().Get("token")
+    if token == "" {
+        log.Println("WRAN: NO token")
+        w.WriteHeader(404)
+        return
+    }
+    if token != cuuid{
+        log.Println("WRAN: token err: unexpected token",token)
+        w.WriteHeader(404)
+        return
+    }
+    w.Write([]byte("{\"message\":\"xlash exit.\"}"))
+    log.Println("SYS: system exit...")
+    sigChan <- syscall.SIGTERM
+    return
     }}
     porxy.ServeHTTP(w, r)
 }
@@ -1031,7 +1059,7 @@ func main() {
         log.Println("xlash [conf_file].json")
         return
     }
-    myVersion=0.3
+    myVersion=0.31
     var err error
     var confData[] byte
     var yamlData string
@@ -1151,7 +1179,7 @@ func main() {
     cuuid = uuid_NewString()
     localfile=filepath.Dir(osExec)
     localcfile=filepath.Join(localfile, ".config")
-    log.Println("start server in",cfg.Local_Listen)
+    logPrint("warn",fmt.Sprintf("xlash server start in %s",cfg.Local_Listen))
     info, err := os.Stat(localcfile)
     if os.IsNotExist(err) {
         err := os.Mkdir(localcfile, 0700)
@@ -1177,7 +1205,7 @@ func main() {
     if len(configuration)<1{
         configuration=localcfile
     }
-    sigChan := make(chan os.Signal, 1)
+    sigChan = make(chan os.Signal, 1)
     signal.Notify(sigChan,
     syscall.SIGINT,
     syscall.SIGTERM,
@@ -1192,9 +1220,11 @@ func main() {
         cshON=true
         go func(){
             confPath := filepath.Join(localcfile, "xlash_clash.yaml")
-
-            yamldata := []byte("mixed-port: 7890\nallow-lan: false\nlog-level: info\nsecret: ''\nexternal-controller: \"127.9.8.1:8383\"\n")
-            err := os.WriteFile(confPath, yamldata, 0600)
+            portPath := filepath.Join(localcfile, ".addr")
+            d1, err := os.ReadFile(portPath)
+            if err != nil {lport="7890";}else{lport=string(d1);}
+            yamldata := []byte("mixed-port: "+lport+"\nallow-lan: false\nlog-level: info\nsecret: ''\nexternal-controller: \"127.9.8.1:8383\"\n")
+            err = os.WriteFile(confPath, yamldata, 0600)
             if err != nil {
                 log.Fatalln("ERR: WriteFile xlash_clash.yaml",err)
                 return
@@ -1248,11 +1278,16 @@ func main() {
     }}
     
     go Exitclean(sigChan,cshON)
-    
+    os.WriteFile(localcfile+"/.token", []byte(cuuid), 0600)
     err = http.ListenAndServe(cfg.Local_Listen,nil)
     if err != nil {
         log.Println("Error starting server:", err)
     }
+}
+
+func logPrint(level string, msg string) {
+    t := time.Now().Format(time.RFC3339Nano)
+    fmt.Printf("time=\"%s\" level=%s msg=\"%s\"\n", t, level, msg)
 }
 
 func uuid_NewString() string {
@@ -1402,6 +1437,19 @@ func httpRoute(w http.ResponseWriter, r *http.Request) {
                 replacement := `external-controller: "127.9.8.1:8383"`
                 cshdye = re.ReplaceAllString(cshdye, replacement)
                 }
+                le := strings.Split(cshdye, "\n")
+                if len(le) > 0 {
+                    chpt:=false
+                    for i := range le {
+                    if strings.HasPrefix(le[i],"mixed-port:") {
+                        le[i] = "mixed-port: " + lport
+                        chpt=true
+                        break
+                    }}
+                    if chpt {
+                    cshdye = strings.Join(le, "\n")
+                    }
+                }
                 err := os.WriteFile(confPath, []byte(cshdye), 0600)
                  if err != nil {
                     log.Println("ERR: save xlash_clash.yaml fail",err)
@@ -1456,14 +1504,14 @@ func MakeYaml() string {
         
     clash_byte, err := os.ReadFile(localfile+"/clash.yaml")
     if err != nil {
-        log.Printf("ERR: Read clash.yaml fail: %v", err)
+        logPrint("error", fmt.Sprintf("Read clash.yaml fail: %v", err))
         return ""
     }
     
     parts := strings.SplitN(string(clash_byte), "{{clash_body}}", 2)
     
     if len(parts) < 2 {
-        log.Println("ERR: clash.yaml format err with {{clash_body}}")
+        logPrint("error", "clash.yaml format err with {{clash_body}}")
         return ""
     }
     
@@ -1487,7 +1535,7 @@ func MakeYaml() string {
     }
     var dn string
     for i:=0;i<server_idx;i++ {
-        dn=dn+gc(server_ip[i],server_commit[i],cuuid)
+        if len(cuuid)!=0{dn=dn+"\n  "+gs(server_ip[i],server_commit[i]);}
     }
     var dm string
     for i:=0;i<server_idx;i++ {
@@ -1497,24 +1545,14 @@ func MakeYaml() string {
     }
 }
 
-func gc(serv_ip string,comit string,uuid string) string{
-    addr := strings.Split(serv_ip, ":")
-    if len(addr) == 2 {
-    return "\n  - {name: "+comit+", server: "+addr[0]+", port: "+addr[1]+", client-fingerprint: chrome, type: vless, uuid: "+uuid+", tls: false, tfo: false, skip-cert-verify: false, network: tcp, udp: false}"
-    } else {
-        log.Println("Invalid server IP format:",serv_ip)
-        return ""
-    }
-}
-
 func gs(serv_ip string,comit string) string{
     parts := strings.Split(serv_ip, ":")
     if len(parts) == 2 {
         serv_addr := parts[0] 
         port := parts[1]
-    return "- {name: "+comit+", server: "+serv_addr+", port: "+port+", type: socks5}"
+    return "- {name: "+comit+", server: "+serv_addr+", port: "+port+", type: socks5, udp: true}"
     } else {
-        log.Println("Invalid server IP format:",serv_ip)
+        logPrint("error", fmt.Sprintf("Invalid server IP format: %s",serv_ip))
         return ""
     }
 }
