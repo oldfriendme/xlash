@@ -23,6 +23,7 @@ jobs:
       - run: |
           mkdir -p build
           EXT=""
+          CGO_ENABLED=0
           if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
           echo "🏗️ Building ${{ matrix.goos }}/${{ matrix.goarch }}..."
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
