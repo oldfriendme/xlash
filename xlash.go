@@ -98,6 +98,20 @@ type XhttpSettings struct {
     Path                  string `json:"path"`
     Host                  string `json:"host"`
     Mode                  string `json:"mode"`
+    Extra                 Extra  `json:"extra"`
+}
+
+type Extra struct {
+    Headers           Headers           `json:"headers"`
+    XPaddingObfsMode  bool              `json:"xPaddingObfsMode"`
+    XPaddingMethod    string            `json:"xPaddingMethod"`
+    XPaddingPlacement string            `json:"xPaddingPlacement"`
+    XPaddingKey       string            `json:"xPaddingKey"`
+    XPaddingHeader    string            `json:"xPaddingHeader"`
+}
+
+type Headers struct {
+    UserAgent string `json:"User-Agent"`
 }
 
 type GrpcSettings struct {
@@ -317,6 +331,16 @@ func Init_OUTPUT_x_json(tagNum string,serv_ip string,out_uuid string,sni string,
                 Path:           pathfile,
                 Host:           sni,
                 Mode:           "stream-up",
+                Extra: Extra{
+                    Headers: Headers{
+                        UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36",
+                    },
+                    XPaddingObfsMode:  true,
+                    XPaddingMethod:    "tokenish",
+                    XPaddingPlacement: "queryInHeader",
+                    XPaddingKey:       "id",
+                    XPaddingHeader:    "X-ID",
+                },
             },
         },
         Mux: Mux{
@@ -1059,7 +1083,7 @@ func main() {
         log.Println("xlash [conf_file].json")
         return
     }
-    myVersion=0.31
+    myVersion=0.4
     var err error
     var confData[] byte
     var yamlData string
